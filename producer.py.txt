@@ -1,0 +1,50 @@
+from kafka import KafkaProducer
+from time import sleep
+from json import dumps
+import pandas as pd
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Kafka Configuration
+KAFKA_BROKER = 'localhost:9092'  # Replace with '<Public-IP>:9092' for remote Kafka
+TOPIC_NAME = 'users_created'     # Match with your consumer topic
+
+# Load CSV and Initialize Kafka Producer
+try:
+    # Read data from a sample CSV (e.g., stockData.csv or any user profile data)
+    df = pd.read_csv('stockData.csv')  # Ensure file exists in the same directory
+    logging.info("CSV loaded successfully.")
+    
+    producer = KafkaProducer(
+        bootstrap_servers=[KAFKA_BROKER],
+        value_serializer=lambda x: dumps(x).encode('utf-8')
+    )
+    logging.info("Kafka producer initialized successfully.")
+except Exception as e:
+    logging.error(f"Failed during initialization: {e}")
+    producer = None
+    df = None
+
+# Stream data if producer and dataframe are ready
+if producer and df is not None:
+    try:
+        logging.info(f"Starting to stream data to topic '{TOPIC_NAME}'...")
+        while True:
+            sample_data = df.sample(1).to_dict(orient='records')[0]
+            producer.send(TOPIC_NAME, value=sample_data)
+            logging.info(f"Sent: {sample_data}")
+            sleep(0.1)  # Simulate streaming delay
+    except KeyboardInterrupt:
+        logging.info("Streaming interrupted by user.")
+    except Exception as e:
+        logging.error(f"Error during streaming: {e}")
+    finally:
+        try:
+            producer.flush()
+            logging.info("Producer flushed and closed successfully.")
+        except Exception as e:
+            logging.error(f"Error while flushing Kafka producer: {e}")
+else:
+    logging.error("Producer not initialized or CSV not loaded.")
