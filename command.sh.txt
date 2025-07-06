@@ -1,0 +1,57 @@
+
+# ----------------------------------------
+# Step 1: Download and Extract Kafka
+# ----------------------------------------
+wget https://downloads.apache.org/kafka/3.3.2/kafka_2.12-3.3.2.tgz
+tar -xvf kafka_2.12-3.3.2.tgz
+cd kafka_2.12-3.3.2
+
+# ----------------------------------------
+# Step 2: Install Java (Kafka requirement)
+# ----------------------------------------
+sudo yum install java-1.8.0-openjdk -y
+
+# ----------------------------------------
+# Step 3: Configure Kafka to Use Public IP
+# ----------------------------------------
+# Replace <Your Public IP> below with your EC2 instance's actual public IP address
+sudo sed -i '/^#advertised.listeners/ a advertised.listeners=PLAINTEXT://<Your Public IP>:9092' config/server.properties
+
+# ----------------------------------------
+# Step 4: Start Zookeeper in First Terminal
+# ----------------------------------------
+bin/zookeeper-server-start.sh config/zookeeper.properties
+
+# ----------------------------------------
+# Step 5: Start Kafka Broker in Second Terminal
+# ----------------------------------------
+export KAFKA_HEAP_OPTS="-Xmx256M -Xms128M"
+bin/kafka-server-start.sh config/server.properties
+
+# ----------------------------------------
+# Step 6: Create a Topic Named "demo_test"
+# ----------------------------------------
+bin/kafka-topics.sh \
+  --create \
+  --topic demo_test \
+  --bootstrap-server <Your Public IP>:9092 \
+  --replication-factor 1 \
+  --partitions 1
+
+# ----------------------------------------
+# Step 7: Start Kafka Producer in Third Terminal
+# ----------------------------------------
+bin/kafka-console-producer.sh \
+  --topic demo_test \
+  --bootstrap-server <Your Public IP>:9092
+
+# Type any messages here, like:
+# {"index":"AAPL","date":"2025-07-06","open":195.0,"high":198.0,"low":193.5,"close":197.8,"adj close":197.8,"volume":33500000,"closeUSD":197.8}
+
+# ----------------------------------------
+# Step 8: Start Kafka Consumer in Fourth Terminal
+# ----------------------------------------
+bin/kafka-console-consumer.sh \
+  --topic demo_test \
+  --bootstrap-server <Your Public IP>:9092 \
+  --from-beginning
