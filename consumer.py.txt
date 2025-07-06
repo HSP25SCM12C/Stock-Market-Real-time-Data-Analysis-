@@ -1,0 +1,71 @@
+from cassandra.cluster import Cluster
+from kafka import KafkaConsumer
+from json import loads, dumps
+
+# Step 1: Set up the Kafka consumer
+try:
+    kafka_consumer = KafkaConsumer(
+        'demo_test',
+        bootstrap_servers=['<Your EC2 Public IP>:9092'],  # Replace with your EC2 IP
+        value_deserializer=lambda m: loads(m.decode('utf-8'))
+    )
+    print("[✔] Kafka consumer connected successfully.")
+except Exception as kafka_error:
+    print("[✘] Failed to initialize Kafka consumer:", kafka_error)
+    kafka_consumer = None
+
+# Step 2: Set up Cassandra connection and schema
+try:
+    cassandra_cluster = Cluster(['<Your Cassandra Host IP>'])  # Replace accordingly
+    cassandra_session = cassandra_cluster.connect()
+
+    # Create keyspace and table if they do not already exist
+    cassandra_session.execute("""
+        CREATE KEYSPACE IF NOT EXISTS stockmarket 
+        WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
+    """)
+    cassandra_session.set_keyspace("stockmarket")
+
+    cassandra_session.execute("""
+        CREATE TABLE IF NOT EXISTS stock_market_data (
+            id int PRIMARY KEY,
+            "index" text,
+            date text,
+            open float,
+            high float,
+            low float,
+            close float,
+            "adj close" float,
+            volume bigint,
+            closeUSD float
+        );
+    """)
+    print("[✔] Cassandra keyspace and table are ready.")
+except Exception as cassandra_error:
+    print("[✘] Cassandra connection or schema creation failed:", cassandra_error)
+    cassandra_session = None
+
+# Step 3: Read messages from Kafka and store in Cassandra
+if kafka_consumer and cassandra_session:
+    record_id = 1
+    print("[🚀] Listening to Kafka and inserting into Cassandra...")
+    for msg in kafka_consumer:
+        try:
+            if msg.value:
+                # Attach unique ID to each message
+                record_data = {'id': record_id}
+                record_data.update(msg.value)
+
+                # Convert to JSON string for insertion
+                json_payload = dumps(record_data)
+
+                # Insert the JSON into Cassandra
+                cassandra_session.execute(
+                    f"INSERT INTO stock_market_data JSON '{json_payload}';"
+                )
+                print(f"[+] Inserted record #{record_id}")
+                record_id += 1
+        except Exception as insert_error:
+            print("[✘] Error inserting data into Cassandra:", insert_error)
+else:
+    print("[⚠] Unable to proceed. Kafka or Cassandra not properly initialized.")
